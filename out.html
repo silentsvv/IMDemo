@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+	<script type="text/javascript" src="sdk/json2.js"></script>
+	<!--web im sdk-->
+	<script type="text/javascript" src="sdk/webim.js"></script>
+	<script type="text/javascript" src="https://tls.qcloud.com/libs/api.min.js"></script>
+	<script type="text/javascript" src="js/lib/lodash.min.js"></script>
+</head>
+<body>
+	ccccccccc
+</body>
+</html>
+<script type="text/javascript">
+	var accountType = 792;
+
+	var loginInfo = {
+        'sdkAppID': 1400001533, //用户所属应用id,必填
+        'identifier': null, //当前用户ID,必须是否字符串类型，必填
+        'accountType': accountType, //用户所属应用帐号类型，必填
+        'userSig': null, //当前用户身份凭证，必须是字符串类型，必填
+        'identifierNick': null, //当前用户昵称，不用填写，登录接口会返回用户的昵称，如果没有设置，则返回用户的id
+        'headurl': 'img/me.jpg' //当前用户默认头像，选填，如果设置过头像，则可以通过拉取个人资料接口来得到头像信息
+    };
+
+	if (TLSHelper.getQuery('tmpsig')) {
+        console.info('start fetchUserSig');
+        //获取正式身份凭证，成功后会回调tlsGetUserSig(res)函数
+        TLSHelper.fetchUserSig();
+	} else {//未登录
+	    if (loginInfo.identifier == null) {
+	        //弹出选择应用类型对话框
+	        $('#select_app_dialog').modal('show');
+	        $("body").css("background-color", 'white');
+	    }
+	}
+
+	function tlsGetUserSig(res) {
+    //成功拿到凭证
+    	console.log(res)
+	    if (res.ErrorCode == 0) {
+	        //从当前URL中获取参数为identifier的值
+	        loginInfo.identifier = TLSHelper.getQuery("identifier");
+	        //拿到正式身份凭证
+	        loginInfo.userSig = res.UserSig;
+	        //从当前URL中获取参数为sdkappid的值
+	        loginInfo.sdkAppID = loginInfo.appIDAt3rd = Number(TLSHelper.getQuery("sdkappid"));
+	        //从cookie获取accountType
+
+	        // initDemoApp();
+	        console.log(res.UserSig)
+	        console.log(loginInfo)
+	        webimLogin();
+	    }
+	}
+
+	var onConnNotify = function (resp) {
+	    var info;
+	    switch (resp.ErrorCode) {
+	        case webim.CONNECTION_STATUS.ON:
+	            webim.Log.warn('建立连接成功: ' + resp.ErrorInfo);
+	            break;
+	        case webim.CONNECTION_STATUS.OFF:
+	            info = '连接已断开，无法收到新消息，请检查下你的网络是否正常: ' + resp.ErrorInfo;
+	            alert(info);
+	            webim.Log.warn(info);
+	            break;
+	        case webim.CONNECTION_STATUS.RECONNECT:
+	            info = '连接状态恢复正常: ' + resp.ErrorInfo;
+	            alert(info);
+	            webim.Log.warn(info);
+	            break;
+	        default:
+	            webim.Log.error('未知连接状态: =' + resp.ErrorInfo);
+	            break;
+	    }
+	};
+
+	var onC2cEventNotifys = {
+	    "92": //消息已读通知
+			function onMsgReadedNotify(notify) {
+				console.log('onC2cEventNotifys');
+				console.log(notify)
+			    var sessMap = webim.MsgStore.sessMap()[webim.SESSION_TYPE.C2C+notify.From_Account];
+			    if(sessMap){
+			        var msgs = _.clone(sessMap.msgs());
+			        var rm_msgs = _.remove(msgs,function(m){
+			            return m.time <= notify.LastReadTime
+			        });
+			        var unread = sessMap.unread()  - rm_msgs.length;
+			        unread = unread > 0 ? unread : 0;
+			        //更新sess的未读数
+			        sessMap.unread( unread );
+			        // console.debug('更新C2C未读数:',notify.From_Account,unread);
+			        //更新页面的未读数角标
+			        // if(unread > 0 ){
+			        //     $("#badgeDiv_"+notify.From_Account).text(unread).show();
+			        // }else{
+			        //     $("#badgeDiv_"+notify.From_Account).val("").hide();
+			        // }
+			    }
+			}
+	};
+
+	function jsonpCallback(rspData) {
+	//设置jsonp返回的
+	    webim.setJsonpLastRspData(rspData);
+	}
+
+	//监听新消息事件
+	//newMsgList 为新消息数组，结构为[Msg]
+	function onMsgNotify(newMsgList) {
+		console.log('newMsgList');
+	    console.warn(newMsgList);
+	    var sess, newMsg;
+	    //获取所有聊天会话
+	    var sessMap = webim.MsgStore.sessMap();
+	    console.log('222222222222222222222222')
+	    console.log(sessMap);
+
+	    for (var j in newMsgList) {//遍历新消息
+	        newMsg = newMsgList[j];
+
+	        if (newMsg.getSession().id() == selToID) {//为当前聊天对象的消息
+	            selSess = newMsg.getSession();
+	            //在聊天窗体中新增一条消息
+	            //console.warn(newMsg);
+	            addMsg(newMsg);
+	        }
+	    }
+	    //消息已读上报，以及设置会话自动已读标记
+	    webim.setAutoRead(selSess, true, true);
+
+	    for (var i in sessMap) {
+	        sess = sessMap[i];
+	        if (selToID != sess.id()) {//更新其他聊天对象的未读消息数
+	            updateSessDiv(sess.type(), sess.id(), sess.unread());
+	        }
+	    }
+	}
+
+	//sdk登录
+	function webimLogin() {
+		var listeners = {
+		    "onConnNotify": onConnNotify//监听连接状态回调变化事件,必填
+		    ,"jsonpCallback": jsonpCallback//IE9(含)以下浏览器用到的jsonp回调函数，
+		    ,"onMsgNotify": onMsgNotify//监听新消息(私聊，普通群(非直播聊天室)消息，全员推送消息)事件，必填
+		    // ,"onBigGroupMsgNotify": onBigGroupMsgNotify//监听新消息(直播聊天室)事件，直播场景下必填
+		    // ,"onGroupSystemNotifys": onGroupSystemNotifys//监听（多终端同步）群系统消息事件，如果不需要监听，可不填
+		    // ,"onGroupInfoChangeNotify": onGroupInfoChangeNotify//监听群资料变化事件，选填
+		    // ,"onFriendSystemNotifys": onFriendSystemNotifys//监听好友系统通知事件，选填
+		    // ,"onProfileSystemNotifys": onProfileSystemNotifys//监听资料系统（自己或好友）通知事件，选填
+		    // ,"onKickedEventCall" : onKickedEventCall//被其他登录实例踢下线
+		    ,"onC2cEventNotifys": onC2cEventNotifys//监听C2C系统消息通道
+		};
+
+		var options = {
+			isLogOn: true
+		}
+
+	    webim.login(
+            loginInfo, listeners, options,
+            function (resp) {
+                loginInfo.identifierNick = resp.identifierNick;//设置当前用户昵称
+                // initDemoApp();
+                console.log(resp);
+                // onSendMsg()
+                var sessMap = webim.MsgStore.sessMap();
+                console.log('00000-00000000000000000000000000000000')
+                console.log(sessMap);
+                var options = {
+        'Count': 50//最近的会话数
+    };
+                webim.getRecentContactList(options, function(resp) {
+                	console.log(resp)
+                })
+            },
+            function (err) {
+                alert(err.ErrorInfo);
+            }
+	    );
+	}
+
+	function onSendMsg() {
+
+		var selToID = 'silentsvvv';
+
+		var selType = webim.SESSION_TYPE.C2C;
+
+		var selSess = new webim.Session(selType, selToID, selToID, '', Math.round(new Date().getTime() / 1000));
+
+	    var isSend = true; //是否为自己发送
+	    var seq = -1; //消息序列，-1表示sdk自动生成，用于去重
+	    var random = Math.round(Math.random() * 4294967296); //消息随机数，用于去重
+	    var msgTime = Math.round(new Date().getTime() / 1000); //消息时间戳
+	    var subType; //消息子类型
+	    if (selType == webim.SESSION_TYPE.C2C) {
+	        subType = webim.C2C_MSG_SUB_TYPE.COMMON;
+	    } else {
+	        //webim.GROUP_MSG_SUB_TYPE.COMMON-普通消息,
+	        //webim.GROUP_MSG_SUB_TYPE.LOVEMSG-点赞消息，优先级最低
+	        //webim.GROUP_MSG_SUB_TYPE.TIP-提示消息(不支持发送，用于区分群消息子类型)，
+	        //webim.GROUP_MSG_SUB_TYPE.REDPACKET-红包消息，优先级最高
+	        subType = webim.GROUP_MSG_SUB_TYPE.COMMON;
+	    }
+	    var msg = new webim.Msg(selSess, isSend, seq, random, msgTime, loginInfo.identifier, subType, loginInfo.identifierNick);
+
+	    var text_obj, face_obj, tmsg, emotionIndex, emotion, restMsgIndex;
+	    //解析文本和表情
+	    var expr = /\[[^[\]]{1,3}\]/mg;
+	    var msgContent = '测试赛所所所所22cccc222222所所所'
+
+	    var emotions = msgContent.match(expr);
+	    if (!emotions || emotions.length < 1) {
+	        text_obj = new webim.Msg.Elem.Text(msgContent);
+	        console.log(text_obj);
+	        msg.addText(text_obj);
+	    }
+
+	    msg.PushInfo = {
+	        "PushFlag": 0,
+	        "Desc": '测试离线推送内容', //离线推送内容
+	        "Ext": '测试离线推送透传内容', //离线推送透传内容
+	        "AndroidInfo": {
+	            "Sound": "android.mp3" //离线推送声音文件路径。
+	        },
+	        "ApnsInfo": {
+	            "Sound": "apns.mp3", //离线推送声音文件路径。
+	            "BadgeMode": 1
+	        }
+	    };
+
+	    msg.PushInfoBoolean = true; //是否开启离线推送push同步
+	    msg.sending = 1;
+	    msg.originContent = msgContent;
+	    console.log(msg);
+	    webim.sendMsg(msg, function(resp) {
+	    	console.log('!!!!!!!!!!!!!!!!!!!!!!')
+	    	console.log(resp);
+	        //发送成功，把sending清理
+	        // $("#id_" + msg.random).find(".spinner").remove();
+	        // webim.Tool.setCookie("tmpmsg_" + selToID, '', 0);
+	    }, function(err) {
+	        //alert(err.ErrorInfo);
+	        //提示重发
+	        // showReSend(msg);
+	    });
+	}
+</script>

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+	<script type="text/javascript" src="sdk/json2.js"></script>
+	<!--web im sdk-->
+	<script type="text/javascript" src="sdk/webim.js"></script>
+	<script type="text/javascript" src="https://tls.qcloud.com/libs/api.min.js"></script>
+</head>
+<body>
+	test
+</body>
+</html>
+<script type="text/javascript">
+	var sdkappid = 1400001533;
+    var accountType = 792;
+    var url = 'http://127.0.0.1/out.html';
+    tlsLoginInfo = {
+    	sdkappid,
+    	accountType,
+    	url
+    }
+	TLSHelper.goLogin(tlsLoginInfo);
+</script>

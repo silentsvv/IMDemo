@@ -1324,13 +1324,13 @@ var webim = { // namespace object webim
         };
         this.warn = function (logStr) {
             try {
-                on && console.warn(logStr);
+                // on && console.warn(logStr);
             } catch (e) {
             }
         };
         this.info = function (logStr) {
             try {
-                on && console.info(logStr);
+                // on && console.info(logStr);
             } catch (e) {
             }
         };
